@@ -21,46 +21,43 @@ def decode_system_transfer(data_base64):
 
     return lamports
 
+SYSTEM_PROGRAM = "11111111111111111111111111111111"
 
 
-def parse_sol_transfer(tx):
+def parse_native_transfer(tx):
 
     result = []
 
     if tx is None:
         return result
 
-    meta = tx.get("meta")
     message = tx.get("transaction", {}).get("message", {})
+    instructions = message.get("instructions", [])
+    account_keys = message.get("accountKeys", [])
 
-    if not meta or not message:
-        return result
+    for ins in instructions:
 
-    pre_balances = meta.get("preBalances", [])
-    post_balances = meta.get("postBalances", [])
-    accounts = message.get("accountKeys", [])
+        program_idx = ins.get("programIdIndex")
+        program_id = account_keys[program_idx]
 
-    fee = meta.get("fee", 0)
-
-    for i in range(len(accounts)):
-
-        pre = pre_balances[i]
-        post = post_balances[i]
-
-        diff = post - pre
-
-        if diff == 0:
+        # 只处理 system program
+        if program_id != SYSTEM_PROGRAM:
             continue
 
-        address = accounts[i]
+        accounts = ins.get("accounts", [])
 
-        # 过滤手续费（通常是负数且等于 fee）
-        if diff == -fee:
+        # system transfer 一般是两个账户
+        if len(accounts) < 2:
             continue
 
+        from_addr = account_keys[accounts[0]]
+        to_addr = account_keys[accounts[1]]
+
+        # ⚠️ 这里先不解析 amount（因为需要 decode data）
         result.append({
-            "address": address,
-            "change": diff
+            "from": from_addr,
+            "to": to_addr,
+            "note": "system transfer detected"
         })
 
     return result
